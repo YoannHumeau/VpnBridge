@@ -1,0 +1,139 @@
+#!/bin/bash
+
+usage()
+{
+        echo "-----------------------"
+        echo "Usage: $0 (stop|start|restart)"
+        echo "-----------------------"
+}
+
+#Network configuration and config file .ovpn informations
+ip=xxx.xxx.xxx.xxx
+eth=eth0
+br=br0
+tap=tap0
+ovpn="/root/client.ovpn"
+
+check_state()
+{
+	#Check état de br0, si pas monté, $statebr contien "not"
+	ip a | grep -Eq ': br0:.*state UP' || statebr="not"
+
+	#Check si processus openvpn tourne, on récupère son pid, sinon la valeur sera 0 par defaut
+	pidvpn=$(pidof openvpn)
+}
+
+bridge_start()
+{
+	#Si br0 est monté on le démonte
+	if [ -z $statebr ]
+	then
+		echo "BRIDGE ALREADY RUNNING !!"
+	else
+		#On monte le bridge
+		echo "BRIDGE STARTING" & sleep 1
+		#Charger le module du pontage du noyau 
+		modprobe bridge  
+	
+		#Ouvre l'interface virtuelle tap0 de manière permanente 
+		openvpn --mktun --dev $tap  
+	
+		#Activer l'interface eth1 
+		ifconfig $eth up  
+	
+		#Création du pont 
+		brctl addbr $br  
+	
+		#Ajout des membres du pont 
+		brctl addif $br $eth 
+		brctl addif $br $tap  
+	
+		#Ajout du mode promiscuité 
+		ifconfig $tap 0.0.0.0 promisc up 
+		ifconfig $eth 0.0.0.0 promisc up  
+
+		#Configurer l'adresse du pont 
+		ifconfig $br $ip netmask 255.255.255.0
+	fi
+}
+
+bridge_stop()
+{
+	if [ -z $statebr ]
+	then
+		echo "BRIDGE STOPPING" & sleep 1
+		#Faire tomber l'interface bridge 
+		ifconfig $br down  
+
+		#Dissocier le bridge 
+		brctl delbr $br  
+
+		#Suppression du tunnel avec openvpn 
+		openvpn --rmtun --dev $tap
+
+		ifdown $eth
+		ifup $eth
+	else
+		echo "BRIDGE ALREADY STOPPED !!"
+	fi
+}
+
+openvpn_start()
+{
+	#On check si le service openvpn est absent des processus
+	if [ -z $pidvpn ]
+	then
+		#Démmarrage open vpn
+		echo "VPN STARTING" & sleep 1
+		#/usr/sbin/openvpn --config $ovpn --writepid /root/client.pid &
+		service openvpn start
+	else	
+		echo "VPN ALREADY RUNNING  !!"
+	
+	fi
+}
+
+openvpn_stop()
+{
+	#On check si le service openvpn est absent des processus
+	if [ -z $pidvpn ]
+	then 
+		echo "VPN ALREADY STOPPED !!"
+	else
+		echo "VPN STOPPING" & sleep 1
+		#Arrêt openvpn
+		service openvpn stop
+	fi
+}
+
+all_start()
+{
+	check_state
+	bridge_start
+	openvpn_start
+}
+
+all_stop()
+{
+	check_state
+	openvpn_stop
+	bridge_stop
+}
+
+
+case $1 in
+	start)
+		all_start
+	;;
+	stop)
+		all_stop
+	;;
+	restart)
+		all_stop
+		all_start
+	;;	
+	*)
+		usage
+
+esac
+exit 0
