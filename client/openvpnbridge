@@ -102,7 +102,7 @@ openvpn_stop()
 	else
 		echo "VPN STOPPING" & sleep 1
 		#Arrêt openvpn
-		service openvpn stop
+		kill -9 $pidvpn
 	fi
 }
 

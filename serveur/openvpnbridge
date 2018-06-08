@@ -12,7 +12,6 @@ ip=xxx.xxx.xxx.xxx
 eth=eth0
 br=br0
 tap=tap0
-ovpn="/root/client.ovpn"
 
 check_state()
 {
